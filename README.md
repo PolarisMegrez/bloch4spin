@@ -1,6 +1,6 @@
 # bloch4spin — Generalized Bloch toolkit for spin-j systems
 
-`bloch4spin` is a small NumPy/SciPy/SymPy toolkit for finite spin systems using the generalized Bloch (COBITO) representation. It supports operator conversion, Hamiltonian and Lindblad evolution, Kraus/POVM/projective measurements, and sequential joint probabilities.
+`bloch4spin` is a lightweight NumPy/SciPy/SymPy toolkit for finite spin systems using the generalized Bloch (COBITO) representation. It supports operator conversion, Hamiltonian and Lindblad evolution, quantum measurements, and sequential joint-probability calculations.
 
 ## Requirements
 
@@ -11,13 +11,25 @@
 
 ## Installation
 
-Install from a local checkout:
+Install the current release from PyPI:
 
 ```bash
+python -m pip install bloch4spin
+```
+
+Alternatively, install from source:
+
+```bash
+git clone https://github.com/PolarisMegrez/bloch4spin.git
+cd bloch4spin
 python -m pip install .
 ```
 
+For development, use `python -m pip install -e .` from the repository root.
+
 ## Quick start
+
+The following example computes the joint probabilities for two projective measurements of a spin-1/2 system evolving under $H=J_y$:
 
 ```python
 import numpy as np
@@ -51,19 +63,26 @@ joint = run(L, state, [(0.7, observables), (1.9, observables)])
 print(joint)
 ```
 
-A `BlochBasis` owns its dimension and caches, so independent dimensions can coexist. Initialization constructs the COBITO basis; tensor-product coefficients are computed only when needed. Code that performs many tensor products can call `basis.precompute_products()` once.
-
-Pass the same explicit `basis` to every state, evolution matrix, and measurement in a calculation. Objects from different basis instances are not mixed implicitly.
+A `BlochBasis` owns its dimension, operator basis, and caches. Pass the same basis instance to every state, evolution matrix, and measurement in a calculation; objects from different basis instances are not mixed implicitly. Tensor-product coefficients are computed only when needed, and `basis.precompute_products()` can be used to warm this cache explicitly.
 
 ## Measurement normalization
+
+Three modes are available for outcome probabilities:
 
 - `normalized`: check for a complete, trace-preserving measurement;
 - `renormalized`: normalize the retained outcome probabilities, as in explicit postselection;
 - `unnormalized`: return raw outcome probabilities.
 
-## Further reading
+These modes control probability handling and completeness checks. For every nonzero-probability outcome, `apply_measurement` returns a separately normalized conditional state.
+
+## Documentation
 
 - [Mathematical and implementation guide](https://github.com/PolarisMegrez/bloch4spin/blob/main/user_guide_en.md)
 - [中文说明](https://github.com/PolarisMegrez/bloch4spin/blob/main/user_guide_ch.md)
+- [PyPI project page](https://pypi.org/project/bloch4spin/)
 
-Licensed under the MIT License.
+## License and AI Assistance
+
+Released under the [MIT License](https://github.com/PolarisMegrez/bloch4spin/blob/main/LICENSE).
+
+AI coding assistants were used to support software development and documentation. The author reviewed and approved the final release and takes responsibility for its contents.
