@@ -1,54 +1,27 @@
-"""
-bloch4spin - Generalized Bloch representation utilities for spin-j systems
-==========================================================================
-bloch4spin provides a generalized Bloch representation for finite spin systems
-(`d = 2j + 1`) using irreducible tensor operators (ITO). The ITO-based Bloch
-vector is typically sparse, allowing fast Hamiltonian-to-Liouvillian conversion,
-efficient time evolution, and lightweight measurement operations.
-
-Author : Yu Xue-hao (GitHub: @PolarisMegrez)
-Affiliation : School of Physical Sciences, UCAS
-Contact : yuxuehao23@mails.ucas.ac.cn
-License : MIT
-Version : 0.1.0 (Nov 2025)
-
-Notes
------
-(neccesary notes)
-"""
+"""Generalized Bloch representation utilities for finite spin systems."""
 
 from .basis import (
-    bloch_init,
-    bloch_dim,
-    bloch_basis,
-    structure_const,
+    BlochBasis,
     GeneralizedBlochVector,
-    bloch_inner_product,
+    bloch_commutator,
     bloch_hermitian_transpose,
+    bloch_inner_product,
+    bloch_tensor_product,
 )
-from .evolution import (
-    GeneralizedBlochHamiltonian,
-    GeneralizedBlochEvolutionMatrix,
-    GeneralizedBlochState,
-)
-from .observable import (
-    GeneralizedBlochObservable,
-)
-from .engine import (
-    run,
-)
+from .engine import run
+from .evolution import GeneralizedBlochEvolutionMatrix, GeneralizedBlochState
+from .observable import GeneralizedBlochObservable, apply_measurement
 
 __all__ = [
-    "GeneralizedBlochHamiltonian",
+    "BlochBasis",
     "GeneralizedBlochEvolutionMatrix",
     "GeneralizedBlochState",
-    "bloch_init",
-    "bloch_dim",
-    "bloch_basis",
-    "structure_const",
     "GeneralizedBlochVector",
+    "GeneralizedBlochObservable",
     "bloch_inner_product",
     "bloch_hermitian_transpose",
-    "GeneralizedBlochObservable",
+    "bloch_commutator",
+    "bloch_tensor_product",
+    "apply_measurement",
     "run",
 ]

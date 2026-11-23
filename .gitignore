@@ -95,3 +95,4 @@ desktop.ini
 ~$*
 *_local.*
 old/
+/tests/

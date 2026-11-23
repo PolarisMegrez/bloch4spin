@@ -1,169 +1,141 @@
-# bloch4spin — Generalized Bloch representation for spin-j systems
+# bloch4spin — Mathematical and implementation guide
 
-`bloch4spin` provides a numerically stable implementation of the generalized Bloch (COBITO) representation for finite spin-j systems (Hilbert space dimension `d = 2j + 1`). It focuses on:
+For installation and a minimal executable example, see [README.md](README.md).
 
-- Construction of the COBITO orthonormal basis and Bloch vector operations
-- Unitary evolution induced by a Hamiltonian in Bloch coordinates (Liouvillian form)
-- Measurement superoperators derived from Kraus / POVM elements / projectors
-- An experiment engine composing evolution and measurements to yield joint probability tensors
+## 1. COBITO basis
 
-The guide is structured as: Mathematical Foundations → API Overview → Quick Start → Implementation Notes → References.
+For a spin-$j$ system with Hilbert-space dimension $d=2j+1$, the canonical orthonormal basis of irreducible tensor operators is written as
 
-## Installation
+$$
+T_q^{(k)} = \sum_{m_1,m_2} (-1)^{j-m_2}\sqrt{2k+1}
+\begin{pmatrix} j & k & j \\ -m_2 & q & m_1 \end{pmatrix}
+|j,m_2\rangle\langle j,m_1|.
+$$
 
-Requirements: Python >= 3.9; NumPy and SymPy are required at runtime.
+The matrices satisfy
 
-Install editable for development:
+$$
+\operatorname{Tr}\!\left[(T_q^{(k)})^\dagger T_{q'}^{(k')}\right]
+=\delta_{kk'}\delta_{qq'},
+\qquad
+T_0^{(0)}=\frac{I}{\sqrt d}.
+$$
 
-```powershell
-pip install -e .
-```
+Negative-$q$ matrices are obtained from
 
-## Mathematical Foundations
+$$
+T_{-q}^{(k)}=(-1)^q(T_q^{(k)})^\dagger.
+$$
 
-This section systematizes irreducible tensor operators (ITO) under the Condon–Shortley convention and builds the Bloch coordinate framework.
+## 2. Bloch coordinates
 
-1) COBITO definition and orthonormality
+The linear index is $n=k(k+1)+q$, where $0\le k<d$ and $-k\le q\le k$, so that $0\le n<d^2$. An operator $A$ is expanded as
 
-- Definition (matrix form):
-  $T_q^{(k)} = \sum_{m_1,m_2} (-1)^{j-m_2}\,\sqrt{2k+1}\begin{pmatrix} j & k & j \\ m_1 & q & -m_2 \end{pmatrix} |j m_2\rangle\langle j m_1|$.
-- Orthonormality (Hilbert–Schmidt inner product):
-  $\mathrm{Tr}\big[T_{q_1}^{(k_1)\dagger} T_{q_2}^{(k_2)}\big] = \delta_{k_1 k_2}\,\delta_{q_1 q_2}$ with fixed $T_0^{(0)} = I/\sqrt{d}$.
-- Phase & conjugation: $T_{-q}^{(k)} = (-1)^q (T_q^{(k)})^{\dagger}$; in our convention matrices can be chosen real.
+$$
+A=\sum_{k,q}r_{kq}T_q^{(k)},\qquad
+r_{kq}=\operatorname{Tr}\!\left[(T_q^{(k)})^\dagger A\right].
+$$
 
-2) Indexing and operator expansion
+Below, a single index $a$ denotes the linear index $(k,q)$, with the shorthand $T_a=T_q^{(k)}$ and $r_a=r_{kq}$.
 
-- Linear index: $(k,q) \mapsto n = k(k+1)+q$, yielding a Bloch vector of length `d^2`; inverse via smallest k with $k(k+2)\ge n$ and $q=n-k(k+1)$.
-- Expansion: coefficients $r_{kq} = \mathrm{Tr}(A\,T_q^{(k)})$ give $A = \sum_{k,q} r_{kq} T_q^{(k)}$.
+A `BlochBasis` owns these matrices and their dimension-local caches. The basis is constructed at initialization. Tensor-product coefficients and Wigner symbols are populated lazily; `precompute_products()` explicitly warms the product cache.
 
-3) Tensor product and commutator structure
+## 3. Operator products and commutators
 
-- Product: $T_{q_1}^{(k_1)} T_{q_2}^{(k_2)} = \sum_{K,Q} c_{k_1 k_2 K}^{q_1 q_2 Q} T_{Q}^{(K)}$ with coefficients from Wigner–3j/6j and Clebsch–Gordan (CG) combinations.
-- Commutator (Schwegler 1965):
-  $$[T_{q_1}^{(k_1)}, T_{q_2}^{(k_2)}] = \sum_{K,Q} f_{k_1 k_2 K}^{q_1 q_2 Q} T_{Q}^{(K)},$$
-  $$f_{k_1 k_2 K}^{q_1 q_2 Q} = \sqrt{(2k_1+1)(2k_2+1)}\,(-1)^{2j+K}\begin{Bmatrix} k_1 & k_2 & K \\ j & j & j \end{Bmatrix}\big(1-(-1)^{k_1+k_2-K}\big)\langle k_1 q_1; k_2 q_2 | K Q \rangle,$$
-  with $Q=q_1+q_2$, $\{\cdot\}$ the Wigner–6j symbol and $\langle\cdot|\cdot\rangle$ a CG coefficient.
+Products of basis elements are expanded as
 
-4) Angular momentum commutators (examples)
+$$
+T_{q_1}^{(k_1)}T_{q_2}^{(k_2)}
+=\sum_{k_3,q_3}C_{k_1q_1,k_2q_2}^{k_3q_3}T_{q_3}^{(k_3)},
+$$
 
-- $[J_{z}, T_{q}^{(k)}]=q\,T_{q}^{(k)}$, $[J_{\pm}, T_{q}^{(k)}]=\sqrt{(k\mp q)(k\pm q+1)}\,T_{q\pm1}^{(k)}$ → $\sum_{i=x,y,z}[J_i,[J_i,T_q^{(k)}]]=k(k+1)T_q^{(k)}$.
+with $q_3=q_1+q_2$. The coefficients are obtained from Wigner 3j and 6j symbols under the Condon–Shortley convention. Bloch-space tensor products and commutators use only the coefficients required by the requested operation.
 
-5) Liouville equation in Bloch form
+## 4. Hamiltonian and Lindblad evolution
 
-- Starting from $\dot\rho=-i[H,\rho]$ we obtain $\dot r = L r$ with
-  $$(L_H)_{ab} = -i\,\mathrm{Tr}\big(T_a^{\dagger}[H, T_b]\big) = -i \sum_c h_c\, f_{ab}{}^{c},$$
-  where $h_c$ are Bloch coefficients of $H$.
+For a Hamiltonian $H$, the Bloch vector obeys $\dot r=L_Hr$, where
 
-6) Measurement superoperators & probability extraction
+$$
+(L_H)_{ab}=-i\operatorname{Tr}\!\left(T_a^\dagger[H,T_b]\right).
+$$
 
-- Kraus map: $\rho\mapsto K\rho K^{\dagger}$ becomes $r' = L_K r$ with row a of $L_K$ equal to $\overline{\mathrm{Bloch}(K^{\dagger} T_a K)}$.
-- Rank-1 projector: if $P=|\psi\rangle\langle\psi|$, then $\rho'=(\langle\psi|\rho|\psi\rangle)P$ and $L = r_P r_P^{\dagger}$.
-- Probability: using $T_0^{(0)}=I/\sqrt{d}$, $p=\mathrm{Tr}(\rho')=\sqrt{d}\,r'_0$ (component 0 of the unnormalized post-measurement vector).
+The implementation evaluates these commutators directly from the stored COBITO matrices rather than constructing every structure constant in advance.
 
-## API Overview
+For a jump operator $K$, the dissipator is
 
-### Module: `bloch4spin.basis`
+$$
+\mathcal D_K[\rho]=K\rho K^\dagger-\frac12\{K^\dagger K,\rho\}.
+$$
 
-- `bloch_init(d: int)` / `bloch_dim()` / `bloch_basis((k,q))`: initialize and query the COBITO basis.
-- `GeneralizedBlochVector(data)`: 1D complex vector (length `d^2`) with arithmetic ops;
-	`from_matrix(A)` and `to_matrix()` convert between operators and Bloch vectors.
-- `basis_product((k1,q1),(k2,q2))`: Bloch vector for $T_{q_1}^{(k_1)} T_{q_2}^{(k_2)}$.
-- `structure_const((k1,q1),(k2,q2))`: Bloch vector of the commutator coefficients.
-- `bloch_tensor_product(u,v)`: Bloch-space product of two operators; `bloch_hermitian_transpose(r)`.
+Since $r_a=\operatorname{Tr}(T_a^\dagger\rho)$, the Bloch vector obeys $\dot r=L_Kr$, where
 
-Notes vs prompt.md:
-- We derive commutators via tensor products; no global dense structure-constant table is stored.
-- Negative q matrices are synthesized from $T_{-q}^{(k)} = (-1)^q (T_q^{(k)})^T$; COBITO matrices are real in this convention.
+$$
+(L_K)_{ab}=\operatorname{Tr}\!\left(T_a^\dagger\mathcal D_K[T_b]\right)
+=\operatorname{Tr}\!\left[T_a^\dagger\left(
+KT_bK^\dagger-\frac12K^\dagger KT_b-\frac12T_bK^\dagger K
+\right)\right].
+$$
 
-### Module: `bloch4spin.evolution`
+The implementation uses the equivalent Hilbert–Schmidt adjoint map. Define
 
-- `GeneralizedBlochHamiltonian(GeneralizedBlochVector)`: Hermiticity validated via COBITO adjoint.
-- `GeneralizedBlochEvolutionMatrix(data)`: stores L; `from_Hamiltonian(H)` accepts ndarray or Bloch vector;
-	constructs $(L_H)_{ab} = -i\,\mathrm{Tr}(T_a^{\dagger}[H, T_b])$ using `structure_const`.
-- `GeneralizedBlochState(GeneralizedBlochVector)`: Hermiticity validated; `evolve(L,t)` applies $e^{Lt}$; `normalization()` enforces $r_{00}=1/\sqrt{d}$.
+$$
+\mathcal D_K^\dagger[A]=K^\dagger AK-\frac12\{K^\dagger K,A\},
+$$
 
-### Module: `bloch4spin.observable`
+so that
 
-- `GeneralizedBlochObservable.from_Kraus(K)`: builds $L_K$ with rows $\overline{\mathrm{Bloch}(K^{\dagger} T_a K)}$.
-- `GeneralizedBlochObservable.from_POVM_elem(M)`: uses $K=\sqrt{M}$ (via eigh) then delegates to `from_Kraus`.
-- `GeneralizedBlochObservable.from_projector(P)`: rank-1 shortcut $L=r_P r_P^{\dagger}$.
-- `apply_measurement([L_i], state, norm_mode=...)`: returns a list of `(probability, post_state)` with modes:
-	- `"normalized"`: checks completeness (sum of `L_i[0,0]` equals 1)
-	- `"renormalized"`: no check; renormalizes probabilities
-	- `"unnormalized"`: no check; raw probabilities
+$$
+(L_K)_{ab}=\operatorname{Tr}\!\left[
+\left(\mathcal D_K^\dagger[T_a]\right)^\dagger T_b\right].
+$$
 
-### Module: `bloch4spin.engine`
+The code evaluates $\mathcal D_K^\dagger[T_a]$ for all $a$ in a batch and then takes inner products with every $T_b$, without storing a complete structure-constant table. This also explains why the basis matrices are transformed as $K^\dagger T_aK$ in the code, whereas the Schrödinger-picture jump term is $K\rho K^\dagger$.
 
-- `run(L, init_state, schedule, norm_mode="normalized", t0=0.0) -> ndarray`:
-	Simulates interleaved evolution and measurement. `schedule` is a list of
-	`(time, [observables_for_that_step])`. Returns an ndarray of joint probabilities
-	with shape `(M1, M2, ..., MK)` where `Mr` is the number of outcomes at step r.
+For a master equation with multiple dissipative channels,
 
-## Quick Start
+$$
+\dot\rho=-i[H,\rho]+\sum_\alpha\gamma_\alpha\mathcal D_{K_\alpha}[\rho],
+\qquad
+L=L_H+\sum_\alpha\gamma_\alpha L_{K_\alpha}.
+$$
 
-Physical context (spin-1/2 two-time measurement):
+`from_Lindblad(K)` constructs one $L_K$ without an additional rate factor; the rate can either be absorbed into $K$ or included explicitly in the sum.
 
-- System: spin $j=1/2$ (`d=2`), initial state $\rho_0=I/d$ (maximally mixed).
-- Evolution: unitary rotation generated by $J_y$ (Larmor precession in a y-directed field).
-- Measurements: projective measurements of $J_z$ at two times; first is uniform, second conditioned by transition matrix $T=|U|^2$, $U=e^{-i J_y \Delta t}$.
-- Goal: obtain a joint probability tensor of shape `2×2` from `engine.run`.
+`GeneralizedBlochState.evolve(L,t)` applies $e^{Lt}$ in place. Repeated propagation times are cached per evolution-matrix object; modifying an evolution matrix in place invalidates those caches.
 
-```python
-import numpy as np
-from bloch4spin.basis import bloch_init
-from bloch4spin.evolution import GeneralizedBlochEvolutionMatrix, GeneralizedBlochState
-from bloch4spin.observable import GeneralizedBlochObservable
-from bloch4spin.engine import run
+## 5. Measurements
 
-# choose dimension (spin-1/2 -> d=2)
-d = 2
-bloch_init(d)
+A single Kraus operator defines the unnormalized update $\rho\mapsto\rho'=K\rho K^\dagger$. In Bloch coordinates, $r'=M_Kr$, where
 
-# build J_y in the |m_z> basis
-def spin_ops(d: int):
-    j = (d - 1) / 2.0
-    Jp = np.zeros((d,d), complex); Jm = np.zeros((d,d), complex)
-    for i in range(1, d):
-        amp = np.sqrt(i * (d - i))
-        Jp[i-1, i] = amp
-    for i in range(0, d-1):
-        amp = np.sqrt((i+1) * (d - (i+1)))
-        Jm[i+1, i] = amp
-    Jy = (Jp - Jm) / (2j)  # 2j is 2*i
-    m_vals = np.array([j - i for i in range(d)], float)
-    Jz = np.diag(m_vals)
-    return Jy, Jz
+$$
+(M_K)_{ab}
+=\operatorname{Tr}\!\left(T_a^\dagger KT_bK^\dagger\right)
+=\operatorname{Tr}\!\left[\left(K^\dagger T_aK\right)^\dagger T_b\right].
+$$
 
-Jy, Jz = spin_ops(d)
-L = GeneralizedBlochEvolutionMatrix.from_Hamiltonian(Jy)
+`from_Kraus(K)` uses the second expression to construct $M_K$ in a batch. `from_projector(P)` uses the equivalent outer-product shortcut for a rank-one projector; higher-rank projectors should be passed to `from_Kraus(P)`.
 
-# initial state: maximally mixed
-rho0 = np.eye(d) / d
-r0 = GeneralizedBlochState.from_matrix(rho0)
+For a POVM effect $E$, the corresponding outcome probability is $p=\operatorname{Tr}(E\rho)$. `from_POVM_elem(E)` sets $K=\sqrt E$, giving the Lüders measurement update. An effect alone does not uniquely determine the conditional post-measurement state; for another update compatible with the same effect, pass the actual Kraus operator to `from_Kraus`.
 
-# J_z projective measurement
-Ps = [np.diag([1.0 if k==i else 0.0 for k in range(d)]) for i in range(d)]
-obs = [GeneralizedBlochObservable.from_projector(P) for P in Ps]
+Since $T_0^{(0)}=I/\sqrt d$, the outcome probability associated with an unnormalized post-measurement vector $r'$ is
 
-# two measurement times
-schedule = [(0.7, obs), (1.9, obs)]
-joint = run(L, r0, schedule)
-print(joint)
-```
+$$
+p=\operatorname{Tr}(\rho')=\sqrt d\,r'_0.
+$$
 
-## Implementation Notes and Differences vs prompt.md
+A complete measurement satisfies $\sum_iK_i^\dagger K_i=I$, so its outcome probabilities sum to one. The measurement modes are:
 
-- Structure constants are produced on demand by tensor-product expansion; we do not keep a dense global `Dict` of full commutator tables.
-- `GeneralizedBlochObservableSet` is not a separate type; each observable is a superoperator. Measurement sets are simple Python lists passed to `apply_measurement` / `engine.run`.
-- The engine returns a dense ndarray for joint probabilities (ordered axes by step). A sparse-dictionary representation is feasible if needed and can be added as an option.
-- Numerical tolerances are local to call sites (e.g., PSD checks use a small `atol`).
+- `normalized`: check that the measurement is complete and trace preserving;
+- `renormalized`: normalize the retained outcome probabilities to sum to one;
+- `unnormalized`: retain the raw outcome probabilities.
 
-## References
+These modes only control the handling of outcome probabilities and the completeness check. For every nonzero-probability outcome, `apply_measurement` returns a separately normalized conditional state; `unnormalized` therefore does not mean that the returned conditional state is unnormalized.
 
-This guide embeds key ITO formulas directly (no need to consult a separate `ITO.md`).
+The engine applies evolution and measurement steps in time order, batches active branches, and returns a dense joint-probability tensor. Its $i$th axis indexes the outcomes of the $i$th measurement.
 
-## References
+## 6. References
 
-- Wigner symbol computation: `sympy.physics.wigner` (`wigner_3j`, `wigner_6j`).
+- SymPy Wigner-symbol functions: `sympy.physics.wigner`.
 - H. Schwegler, “On commutation relations of tensor operators,” 1965. DOI: https://doi.org/10.1007/BF02814299.
-- Eugene P. Wigner, “Group Theory and Its Application to the Quantum Mechanics of Atomic Spectra,” 1959, publisher & city: <publisher placeholder>, <city placeholder>.
+- E. P. Wigner, *Group Theory and Its Application to the Quantum Mechanics of Atomic Spectra*, 1959.
+- D. A. Varshalovich, A. N. Moskalev, and V. K. Khersonskii, *Quantum Theory of Angular Momentum*.
